@@ -5,12 +5,12 @@ import dask
 from coffea import hist
 from coffea import processor as processor
 from coffea.analysis_objects import JaggedCandidateArray
-from coffea.processor.test_items import NanoTestProcessor
-from coffea.processor.test_items import NanoEventsProcessor
+from coffea.processor.test_items import NanoEventsProcessor, NanoTestProcessor
 from coffea.util import save
 from dask.distributed import Client, LocalCluster, get_worker
 from dask_jobqueue import HTCondorCluster
 from dask_jobqueue.htcondor import HTCondorJob
+from distributed.security import Security
 
 from coffea_casa.coffea_casa import CoffeaCasaCluster
 
@@ -48,18 +48,30 @@ host_ip = os.getenv("HOST_IP")
 
 #client = CoffeaCasaCluster(worker_image="coffeateam/coffea-casa-analysis:0.1.46", external_ip=host_ip, min_scale=15, max_scale=50)
 
-cluster = HTCondorCluster(cores=16,
+sec_dask = Security(tls_ca_file='/etc/cmsaf-secrets/ca.pem',
+               tls_worker_cert='/etc/cmsaf-secrets/hostcert.pem',
+               tls_worker_key='/etc/cmsaf-secrets/hostcert.pem',
+               tls_client_cert='/etc/cmsaf-secrets/hostcert.pem',
+               tls_client_key='/etc/cmsaf-secrets/hostcert.pem',
+               tls_scheduler_cert='/etc/cmsaf-secrets/hostcert.pem',
+               tls_scheduler_key='/etc/cmsaf-secrets/hostcert.pem',
+               require_encryption=True)
+
+cluster = HTCondorCluster(cores=4,
                           memory="6GB",
-                          disk="5GB",
+                          disk="4GB",
                           log_directory="logs",
-                          silence_logs="debug",
-                          scheduler_options= {"dashboard_address":"8786","port":8787, "external_address": "129.93.183.33:8787"},
+                          silence_logs="DEBUG",
+                          security = sec_dask,
+                          scheduler_options= {"protocol": "tls", "dashboard_address":"8786", "port":8787, "external_address": "tls://129.93.183.33:8787"},
                           # HTCondor submit script
                           job_extra={"universe": "docker",
-                                     "encrypt_input_files": "/etc/cmsaf-secrets/xcache_token",
-                                     "transfer_input_files": "/etc/cmsaf-secrets/xcache_token",
-                                     "docker_image": "coffeateam/coffea-casa-analysis:0.1.46", 
-                                    "container_service_names": "dask",
+                                     # To be used with coffea-casa:0.1.11
+                                     "transfer_input_files": "/etc/cmsaf-secrets/xcache_token,/etc/cmsaf-secrets/ca.pem,/etc/cmsaf-secrets/hostcert.pem",
+                                     "encrypt_input_files": "/etc/cmsaf-secrets/xcache_token,/etc/cmsaf-secrets/ca.pem,/etc/cmsaf-secrets/hostcert.pem",
+                                     #"docker_network_type": "host",
+                                     "docker_image": "coffeateam/coffea-casa-analysis:0.1.26",
+                                     "container_service_names": "dask",
                                      "dask_container_port": "8787",
                                      "should_transfer_files": "YES",
                                      "when_to_transfer_output": "ON_EXIT",
@@ -68,7 +80,7 @@ cluster = HTCondorCluster(cores=16,
 
 cluster.adapt(minimum_jobs=10, maximum_jobs=15)
 
-client = Client(cluster)
+client = Client(cluster, security=sec_dask)
 print("Created dask client:", client)
 
 client.get_versions(check=True)
@@ -101,5 +113,3 @@ print("Events / s / thread: {:,.0f}".format(res[1]['entries'].value / res[1]['pr
 print("Bytes / s / thread: {:,.0f}".format(res[1]['bytesread'].value / res[1]['processtime'].value))
 print("Events / s: {:,.0f}".format(res[1]['entries'].value / (toc - tic)))
 print("Bytes / s: {:,.0f}".format(res[1]['bytesread'].value / (toc - tic)))
-
-save(res, 'runX.coffea')
