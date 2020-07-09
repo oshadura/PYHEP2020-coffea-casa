@@ -15,7 +15,11 @@ from distributed.security import Security
 
 from coffea_casa.coffea_casa import CoffeaCasaCluster
 
-fileset = {'massT': ["data/Run2012B_SingleMu.root"]}
+fileset = {
+    'massT': { 'files': ['root://eospublic.cern.ch//eos/root-eos/benchmark/Run2012B_SingleMu.root'],
+             'treename': 'Events'
+            }
+}
 
 @nb.njit()
 def trilepton_selection(ee_starts, ee_stops, ee_arg0s, ee_arg1s,
@@ -246,12 +250,18 @@ HTCondorJob.submit_command = "condor_submit -spool"
 #client = Client(cluster)
 #print("Created dask client:", client)
 
+host_ip = os.getenv("HOST_IP")
+
 client = CoffeaCasaCluster(worker_image="coffeateam/coffea-casa-analysis:0.1.46", external_ip=host_ip, min_scale=5, max_scale=6, tls=True)
 
 print("Created dask client:", client)
 
 client.run(lambda dask_worker: dask_worker.outgoing_transfer_log)
 client.run(lambda dask_worker: dask_worker.incoming_transfer_log)
+
+exe_args = {
+        'client': client,
+    }
 
 output = processor.run_uproot_job(fileset,
                                     treename='Events',
@@ -260,7 +270,7 @@ output = processor.run_uproot_job(fileset,
                                     executor_args = exe_args
                                     )
 
-fig,ax, _ = hist.plot1d(output['massT'], overlay='dataset', fill_opts={'edgecolor': (0,0,0,0.3), 'alpha': 0.8})
+hist.plot1d(output['massT'], overlay='dataset', fill_opts={'edgecolor': (0,0,0,0.3), 'alpha': 0.8})
 
 for key, value in output['cutflow'].items():
     print(key, value)

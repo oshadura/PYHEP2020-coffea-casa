@@ -6,6 +6,7 @@ from coffea import hist
 from coffea import processor as processor
 from coffea.analysis_objects import JaggedCandidateArray
 from coffea.processor.test_items import NanoTestProcessor
+from coffea.processor.test_items import NanoEventsProcessor
 from coffea.util import save
 from dask.distributed import Client, LocalCluster, get_worker
 from dask_jobqueue import HTCondorCluster
@@ -45,7 +46,32 @@ HTCondorJob.submit_command = "condor_submit -spool"
 
 host_ip = os.getenv("HOST_IP")
 
-client = CoffeaCasaCluster(worker_image="coffeateam/coffea-casa-analysis:0.1.46", external_ip=host_ip, min_scale=5, max_scale=6)
+#client = CoffeaCasaCluster(worker_image="coffeateam/coffea-casa-analysis:0.1.46", external_ip=host_ip, min_scale=15, max_scale=50)
+
+cluster = HTCondorCluster(cores=16,
+                          memory="6GB",
+                          disk="5GB",
+                          log_directory="logs",
+                          silence_logs="debug",
+                          scheduler_options= {"dashboard_address":"8786","port":8787, "external_address": "129.93.183.33:8787"},
+                          # HTCondor submit script
+                          job_extra={"universe": "docker",
+                                     "encrypt_input_files": "/etc/cmsaf-secrets/xcache_token",
+                                     "transfer_input_files": "/etc/cmsaf-secrets/xcache_token",
+                                     "docker_image": "coffeateam/coffea-casa-analysis:0.1.46", 
+                                    "container_service_names": "dask",
+                                     "dask_container_port": "8787",
+                                     "should_transfer_files": "YES",
+                                     "when_to_transfer_output": "ON_EXIT",
+                                     "+DaskSchedulerAddress": '"129.93.183.33:8787"',
+                                    })
+
+cluster.adapt(minimum_jobs=10, maximum_jobs=15)
+
+client = Client(cluster)
+print("Created dask client:", client)
+
+client.get_versions(check=True)
 
 config = {
     'client': client,
@@ -63,6 +89,7 @@ config = {
 
 chunksize = 100000
 p = NanoEventsProcessor(canaries=['0001fd0d874c9fff11e9a13cd2e55d9fbeef;Events;0;99159;Muon_pt'])
+
 
 tic = time.time()
 res = processor.run_uproot_job(filelist, 'Events', p, processor.dask_executor, config, chunksize=chunksize, maxchunks=None, pre_args={'client': client})
