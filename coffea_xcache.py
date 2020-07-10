@@ -66,11 +66,9 @@ cluster = HTCondorCluster(cores=4,
                           scheduler_options= {"protocol": "tls", "dashboard_address":"8786", "port":8787, "external_address": "tls://129.93.183.33:8787"},
                           # HTCondor submit script
                           job_extra={"universe": "docker",
-                                     # To be used with coffea-casa:0.1.11
                                      "transfer_input_files": "/etc/cmsaf-secrets/xcache_token,/etc/cmsaf-secrets/ca.pem,/etc/cmsaf-secrets/hostcert.pem",
                                      "encrypt_input_files": "/etc/cmsaf-secrets/xcache_token,/etc/cmsaf-secrets/ca.pem,/etc/cmsaf-secrets/hostcert.pem",
-                                     #"docker_network_type": "host",
-                                     "docker_image": "coffeateam/coffea-casa-analysis:0.1.26",
+                                     "docker_image": "coffeateam/coffea-casa-analysis:0.1.46",
                                      "container_service_names": "dask",
                                      "dask_container_port": "8787",
                                      "should_transfer_files": "YES",
@@ -78,7 +76,7 @@ cluster = HTCondorCluster(cores=4,
                                      "+DaskSchedulerAddress": '"129.93.183.33:8787"',
                                     })
 
-cluster.adapt(minimum_jobs=10, maximum_jobs=15)
+cluster.scale(jobs=15)
 
 client = Client(cluster, security=sec_dask)
 print("Created dask client:", client)
